@@ -1,74 +1,79 @@
+require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql2');
-const nodemailer = require('nodemailer');
-const { Parser } = require('json2csv');
-require('dotenv').config();
+const path = require('path');
+const cors = require('cors');
 
 const app = express();
-app.use(express.json());
-app.use(express.static('public'));
 
+// --- MIDDLEWARE ---
+app.use(cors());
+app.use(express.json());
+
+// CRITICAL: This tells Render where to find your HTML/CSS/JS files
+// Make sure your index.html is inside a folder named 'public'
+app.use(express.static(path.join(__dirname, 'public')));
+
+// --- DATABASE CONNECTION (Optimized for TiDB Cloud) ---
 const db = mysql.createConnection({
     host: process.env.DB_HOST,
+    port: process.env.DB_PORT || 4000, // TiDB default port
     user: process.env.DB_USER,
     password: process.env.DB_PASS,
-    database: process.env.DB_NAME
+    database: process.env.DB_NAME || 'test',
+    // SSL is mandatory for TiDB Cloud security
+    ssl: {
+        minVersion: 'TLSv1.2',
+        rejectUnauthorized: true
+    }
 });
 
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
+db.connect((err) => {
+    if (err) {
+        console.error('Database connection failed: ' + err.stack);
+        return;
+    }
+    console.log('Connected to TiDB Cloud Database.');
 });
 
-app.get('/get-expenses', (req, res) => {
-    db.query("SELECT * FROM expenses ORDER BY log_date DESC", (err, results) => {
+// --- API ROUTES ---
+
+// 1. Get all expenses
+app.get('/api/expenses', (req, res) => {
+    const sql = 'SELECT * FROM expenses ORDER BY log_date DESC';
+    db.query(sql, (err, results) => {
         if (err) return res.status(500).send(err);
         res.json(results);
     });
 });
 
-app.post('/add-expense', (req, res) => {
-    const { item, amount, category, currentBudget } = req.body;
-    const limit = parseFloat(currentBudget) || 0;
-
-    db.query("INSERT INTO expenses (item_name, amount, category) VALUES (?, ?, ?)", [item, amount, category], (err) => {
-        if (err) return res.status(500).json({ message: "Error" });
-
-        db.query("SELECT SUM(amount) as total FROM expenses", (err, results) => {
-            // FIX: Wraps the result in Number() to prevent .toFixed() errors
-            const currentTotal = Number(results[0].total) || 0;
-
-            transporter.sendMail({
-                from: process.env.EMAIL_USER,
-                to: process.env.EMAIL_USER,
-                subject: 'SpendWise: New Expense Logged',
-                text: `Confirmed: ${item} for Rs. ${amount} (${category})`
-            });
-
-            if (limit > 0 && currentTotal > limit) {
-                transporter.sendMail({
-                    from: process.env.EMAIL_USER,
-                    to: process.env.EMAIL_USER,
-                    subject: '🚨 SPENDING LIMIT EXCEEDED',
-                    text: `Critical Alert: Your total spend is Rs. ${currentTotal.toFixed(2)}, which exceeds your budget of Rs. ${limit.toFixed(2)}!`
-                });
-            }
-            res.json({ message: "Success" });
-        });
-    });
-});
-
-app.post('/delete-all', (req, res) => {
-    db.query("DELETE FROM expenses", (err) => res.json({ message: "Cleared" }));
-});
-
-app.get('/export-csv', (req, res) => {
-    db.query("SELECT item_name, amount, category, log_date FROM expenses", (err, results) => {
+// 2. Add a new expense
+app.post('/api/expenses', (req, res) => {
+    const { item_name, amount, category } = req.body;
+    const sql = 'INSERT INTO expenses (item_name, amount, category) VALUES (?, ?, ?)';
+    db.query(sql, [item_name, amount, category], (err, result) => {
         if (err) return res.status(500).send(err);
-        const parser = new Parser();
-        const csv = parser.parse(results);
-        res.header('Content-Type', 'text/csv').attachment('SpendWise_Report.csv').send(csv);
+        res.json({ id: result.insertId, item_name, amount, category });
     });
 });
 
-app.listen(3000, () => console.log(`🚀 SpendWise Pro live at http://localhost:3000`));
+// 3. Delete an expense
+app.delete('/api/expenses/:id', (req, res) => {
+    const sql = 'DELETE FROM expenses WHERE id = ?';
+    db.query(sql, [req.params.id], (err, result) => {
+        if (err) return res.status(500).send(err);
+        res.json({ message: 'Deleted successfully' });
+    });
+});
+
+// --- SERVING THE FRONTEND ---
+// This handles the "Not Found" error by sending index.html for the root URL
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// --- START SERVER ---
+const PORT = process.env.PORT || 3000; 
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
