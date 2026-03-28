@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SpendWise | Smart Financial Analytics</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f4f8; display: flex; flex-direction: column; align-items: center; padding: 40px; gap: 20px; }
+        .main-layout { display: flex; gap: 20px; max-width: 1000px; width: 100%; }
+        .card, .dashboard { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+        .card { width: 400px; } .dashboard { flex: 1; }
+        .history-section { width: 100%; max-width: 940px; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+        h1, h2 { color: #1a365d; margin-top: 0; }
+        input, select { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #cbd5e0; border-radius: 8px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        .btn-log { background: #2f855a; color: white; }
+        .btn-csv { background: #2b6cb0; color: white; margin-top: 20px; }
+        .currency-bar { display: flex; justify-content: space-between; align-items: center; background: #edf2f7; padding: 10px; border-radius: 8px; margin-bottom: 15px; }
+        .advice-box { background: #ebf8ff; border-left: 5px solid #3182ce; padding: 15px; border-radius: 8px; margin-top: 20px; transition: 0.3s; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #edf2f7; }
+        .stat-box { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #edf2f7; font-size: 1.1rem; }
+    </style>
+</head>
+<body>
+
+    <div class="main-layout">
+        <div class="card">
+            <h1>SpendWise</h1>
+            <div class="currency-bar">
+                <span>Currency:</span>
+                <div>
+                    <button id="btnINR" onclick="setCurrency('INR')" style="width:auto; margin:0; padding:5px 10px; background:#2b6cb0; color:white;">INR</button>
+                    <button id="btnUSD" onclick="setCurrency('USD')" style="width:auto; margin:0; padding:5px 10px; background:#cbd5e0;">USD</button>
+                </div>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <input type="number" id="userBudget" placeholder="Monthly Budget">
+                <button onclick="updateBudget()" style="width:80px; background:#4a5568; color:white;">Set</button>
+            </div>
+            <hr style="margin:20px 0; border:0; border-top:1px solid #eee;">
+            <input type="text" id="item" placeholder="Item Name">
+            <input type="number" id="amount" placeholder="Amount (Rs.)">
+            <select id="category">
+                <option value="Rent/Bills">🏠 Rent & Bills (Needs)</option>
+                <option value="Food">🍔 Food (Wants)</option>
+                <option value="Shopping">🛍️ Shopping (Wants)</option>
+                <option value="Travel">🚗 Travel (Wants)</option>
+                <option value="Savings">💰 Savings</option>
+                <option value="Education">📚 Education</option>
+                <option value="Others">⚙️ Others</option>
+            </select>
+            <button class="btn-log" onclick="addExpense()">Log Expense</button>
+            
+            <div class="advice-box" id="adviceContainer">
+                <span id="adviceText">Enter a budget to begin analysis.</span>
+            </div>
+
+            <button class="btn-csv" onclick="window.location.href='/export-csv'">📥 Export History (CSV)</button>
+        </div>
+
+        <div class="dashboard">
+            <h2>Analytics</h2>
+            <div style="height:220px; display:flex; justify-content:center;"><canvas id="spendChart"></canvas></div>
+            <div style="margin-top:20px;">
+                <div class="stat-box"><span>Budget:</span> <b id="dispBudget">0</b></div>
+                <div class="stat-box"><span>Total Spent:</span> <b id="totalAmt">0</b></div>
+                <div class="stat-box"><span>Remaining:</span> <b id="balanceAmt">0</b></div>
+            </div>
+            <button onclick="clearHistory()" style="background:#c53030; color:white; width:auto; padding:8px 15px; margin-top:20px; float:right;">Reset Data</button>
+        </div>
+    </div>
+
+    <div class="history-section">
+        <h2>Expense Log</h2>
+        <table id="historyTable">
+            <thead><tr><th>Date</th><th>Item</th><th>Category</th><th>Amount</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        let myChart;
+        let monthlyBudget = localStorage.getItem('myBudget') || 0;
+        let currentCurrency = 'INR';
+        const RATE = 83;
+
+        window.onload = () => {
+            if(monthlyBudget > 0) document.getElementById('userBudget').value = monthlyBudget;
+            fetchExpenses();
+        };
+
+        function setCurrency(ccy) {
+            currentCurrency = ccy;
+            document.getElementById('btnINR').style.background = ccy === 'INR' ? '#2b6cb0' : '#cbd5e0';
+            document.getElementById('btnUSD').style.background = ccy === 'USD' ? '#2b6cb0' : '#cbd5e0';
+            fetchExpenses();
+        }
+
+        function format(val) {
+            return currentCurrency === 'USD' ? "$" + (val / RATE).toFixed(2) : "Rs. " + val.toFixed(2);
+        }
+
+        async function updateBudget() {
+            const newBudget = document.getElementById('userBudget').value;
+            if(confirm("Setting a new budget will clear history for the new month. Continue?")) {
+                await fetch('/delete-all', { method: 'POST' });
+                monthlyBudget = newBudget;
+                localStorage.setItem('myBudget', monthlyBudget);
+                fetchExpenses();
+            }
+        }
+
+        async function fetchExpenses() {
+            const res = await fetch('/get-expenses');
+            const data = await res.json();
+            let total = 0;
+            const cats = { "Rent/Bills": 0, Food: 0, Shopping: 0, Travel: 0, Savings: 0, Education: 0, Others: 0 };
+            const tableBody = document.querySelector('#historyTable tbody');
+            tableBody.innerHTML = '';
+
+            data.forEach(ex => {
+                const amt = parseFloat(ex.amount);
+                total += amt;
+                if(cats[ex.category] !== undefined) cats[ex.category] += amt;
+                tableBody.innerHTML += `<tr><td>${new Date(ex.log_date).toLocaleDateString()}</td><td>${ex.item_name}</td><td>${ex.category}</td><td>${format(amt)}</td></tr>`;
+            });
+
+            document.getElementById('dispBudget').innerText = format(parseFloat(monthlyBudget));
+            document.getElementById('totalAmt').innerText = format(total);
+            document.getElementById('balanceAmt').innerText = format(monthlyBudget - total);
+            generateAdvice(total, cats);
+            updateChart(cats);
+        }
+
+        function generateAdvice(total, cats) {
+            const remaining = monthlyBudget - total;
+            const daysLeft = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() - new Date().getDate() + 1;
+            const wants = (cats.Food || 0) + (cats.Shopping || 0) + (cats.Travel || 0);
+            const wantsPercent = monthlyBudget > 0 ? (wants / monthlyBudget) * 100 : 0;
+            
+            let advice = `<b>💡 Insight:</b> `;
+            
+            if (monthlyBudget <= 0) {
+                advice += "Set a budget to get daily safety limits.";
+            } else if (remaining <= 0) {
+                advice += "⚠️ Budget exhausted! Stop non-essential spending.";
+                document.getElementById('adviceContainer').style.borderLeftColor = "#e53e3e";
+            } else {
+                const daily = remaining / daysLeft;
+                advice += `Safe to spend <b>${format(daily)}</b>/day. `;
+                if(wantsPercent > 30) {
+                    advice += `<br>🛑 'Wants' are ${wantsPercent.toFixed(1)}% of budget. Reduce Shopping/Food!`;
+                    document.getElementById('adviceContainer').style.borderLeftColor = "#dd6b20";
+                } else {
+                    advice += `<br>✅ Financial health is good.`;
+                    document.getElementById('adviceContainer').style.borderLeftColor = "#3182ce";
+                }
+            }
+            document.getElementById('adviceText').innerHTML = advice;
+        }
+
+        function updateChart(cData) {
+            const ctx = document.getElementById('spendChart').getContext('2d');
+            if(myChart) myChart.destroy();
+            myChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(cData),
+                    datasets: [{ data: Object.values(cData), backgroundColor: ['#3182ce', '#f6ad55', '#ed64a6', '#4299e1', '#48bb78', '#9f7aea', '#a0aec0'] }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        async function addExpense() {
+            const item = document.getElementById('item').value;
+            const amount = document.getElementById('amount').value;
+            const category = document.getElementById('category').value;
+            if(!item || !amount) return;
+            await fetch('/add-expense', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ item, amount, category, currentBudget: monthlyBudget })
+            });
+            document.getElementById('item').value = '';
+            document.getElementById('amount').value = '';
+            fetchExpenses();
+        }
+
+        async function clearHistory() {
+            if(confirm("Permanently delete all logs?")) {
+                await fetch('/delete-all', {method:'POST'});
+                fetchExpenses();
+            }
+        }
+    </script>
+</body>
+</html>
