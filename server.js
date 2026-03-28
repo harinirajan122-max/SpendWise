@@ -35,6 +35,7 @@ app.post('/add-expense', (req, res) => {
         if (err) return res.status(500).json({ message: "Error" });
 
         db.query("SELECT SUM(amount) as total FROM expenses", (err, results) => {
+            // FIX: Wraps the result in Number() to prevent .toFixed() errors
             const currentTotal = Number(results[0].total) || 0;
 
             transporter.sendMail({
@@ -61,20 +62,13 @@ app.post('/delete-all', (req, res) => {
     db.query("DELETE FROM expenses", (err) => res.json({ message: "Cleared" }));
 });
 
-// CSV EXPORT ROUTE
 app.get('/export-csv', (req, res) => {
     db.query("SELECT item_name, amount, category, log_date FROM expenses", (err, results) => {
         if (err) return res.status(500).send(err);
-        try {
-            const parser = new Parser();
-            const csv = parser.parse(results);
-            res.header('Content-Type', 'text/csv');
-            res.attachment('SpendWise_Report.csv');
-            res.send(csv);
-        } catch (error) {
-            res.status(500).send("CSV Generation Error");
-        }
+        const parser = new Parser();
+        const csv = parser.parse(results);
+        res.header('Content-Type', 'text/csv').attachment('SpendWise_Report.csv').send(csv);
     });
 });
 
-app.listen(3000, () => console.log(`🚀 SpendWise live at http://localhost:3000`));
+app.listen(3000, () => console.log(`🚀 SpendWise Pro live at http://localhost:3000`));

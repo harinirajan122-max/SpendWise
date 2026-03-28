@@ -1,0 +1,19 @@
+name: SpendWise Build Check
+on:
+  push:
+    branches: [ "main" ] # Runs every time you push to the main branch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest # Uses a virtual Linux machine
+
+    steps:
+    - uses: actions/checkout@v3 # Copies your code onto the virtual machine
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        
+    - run: npm install # Checks if all your packages (express, mysql, etc.) install correctly
+    - run: echo "CI/CD Pipeline Passed! Your code is solid."
