@@ -33,37 +33,60 @@ app.get('/get-expenses', (req, res) => {
     });
 });
 
-// FEATURE: Add Expense & Alerts (Your exact logic)
-app.post('/add-expense', (req, res) => {
+// FEATURE: Add Expense & Alerts (Optimized for Vercel/TiDB)
+app.post('/add-expense', async (req, res) => {
     const { item, amount, category, currentBudget } = req.body;
     const limit = parseFloat(currentBudget) || 0;
 
+    // 1. Insert the expense into TiDB
     db.query("INSERT INTO expenses (item_name, amount, category) VALUES (?, ?, ?)", [item, amount, category], (err) => {
-        if (err) return res.status(500).json({ message: "Error" });
+        if (err) {
+            console.error("Database Insert Error:", err);
+            return res.status(500).json({ message: "Error" });
+        }
 
-        db.query("SELECT SUM(amount) as total FROM expenses", (err, results) => {
+        // 2. Get the new total for the budget check
+        db.query("SELECT SUM(amount) as total FROM expenses", async (err, results) => {
+            if (err) return res.status(500).json({ message: "Error fetching total" });
+
             const currentTotal = Number(results[0].total) || 0;
+            const emailPromises = [];
 
-            transporter.sendMail({
-                from: process.env.EMAIL_USER,
-                to: process.env.EMAIL_USER,
-                subject: 'SpendWise: New Expense Logged',
-                text: `Confirmed: ${item} for Rs. ${amount} (${category})`
-            });
-
-            if (limit > 0 && currentTotal > limit) {
+            // 3. Prepare the Confirmation Email
+            emailPromises.push(
                 transporter.sendMail({
                     from: process.env.EMAIL_USER,
                     to: process.env.EMAIL_USER,
-                    subject: '🚨 SPENDING LIMIT EXCEEDED',
-                    text: `Critical Alert: Your total spend is Rs. ${currentTotal.toFixed(2)}, which exceeds your budget of Rs. ${limit.toFixed(2)}!`
-                });
+                    subject: 'SpendWise: New Expense Logged',
+                    text: `Confirmed: ${item} for Rs. ${amount} (${category})`
+                })
+            );
+
+            // 4. Prepare the Alert Email (if limit exceeded)
+            if (limit > 0 && currentTotal > limit) {
+                emailPromises.push(
+                    transporter.sendMail({
+                        from: process.env.EMAIL_USER,
+                        to: process.env.EMAIL_USER,
+                        subject: '🚨 SPENDING LIMIT EXCEEDED',
+                        text: `Critical Alert: Your total spend is Rs. ${currentTotal.toFixed(2)}, which exceeds your budget of Rs. ${limit.toFixed(2)}!`
+                    })
+                );
             }
-            res.json({ message: "Success" });
+
+            // 5. CRITICAL: Wait for all emails to finish before sending 'Success'
+            try {
+                await Promise.all(emailPromises);
+                console.log("✅ All emails sent successfully");
+                res.json({ message: "Success" });
+            } catch (mailErr) {
+                console.error("❌ Email failed but DB saved:", mailErr);
+                // We still send success because the data is in the DB
+                res.json({ message: "Success" }); 
+            }
         });
     });
 });
-
 // FEATURE: Delete All (Your exact logic)
 app.post('/delete-all', (req, res) => {
     db.query("DELETE FROM expenses", (err) => res.json({ message: "Cleared" }));
