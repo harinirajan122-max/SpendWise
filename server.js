@@ -11,12 +11,15 @@ app.use(express.json());
 // 1. Tell Express where the public folder is (Vercel-friendly way)
 app.use(express.static(path.join(__dirname, 'public')));
 
-const db = mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    database: process.env.DB_NAME,
-    port: process.env.DB_PORT || 4000 // TiDB usually uses 4000
+  const connection = mysql.createConnection({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_NAME,
+  port: 4000,
+  ssl: {
+    rejectUnauthorized: true
+  }
 });
 
 const transporter = nodemailer.createTransport({
