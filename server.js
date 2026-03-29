@@ -2,28 +2,30 @@ const express = require('express');
 const mysql = require('mysql2');
 const nodemailer = require('nodemailer');
 const { Parser } = require('json2csv');
-const path = require('path'); // ADDED for pathing
+const path = require('path'); // ESSENTIAL: To find files on Vercel
 require('dotenv').config();
 
 const app = express();
 app.use(express.json());
 app.use(express.static('public'));
 
+// 1. Database Connection (Added SSL for TiDB Cloud)
 const db = mysql.createConnection({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASS,
     database: process.env.DB_NAME,
-    port: process.env.DB_PORT || 4000, // ADDED port support
-    ssl: { rejectUnauthorized: true }   // ADDED for TiDB Cloud security
+    port: process.env.DB_PORT || 4000,
+    ssl: { rejectUnauthorized: true } // Required for Vercel -> TiDB
 });
 
+// 2. Email Setup (Your exact logic)
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
 });
 
-// FEATURE: Get Expenses
+// FEATURE: Get Expenses (Your exact logic)
 app.get('/get-expenses', (req, res) => {
     db.query("SELECT * FROM expenses ORDER BY log_date DESC", (err, results) => {
         if (err) return res.status(500).send(err);
@@ -31,7 +33,7 @@ app.get('/get-expenses', (req, res) => {
     });
 });
 
-// FEATURE: Add Expense & Alerts
+// FEATURE: Add Expense & Alerts (Your exact logic)
 app.post('/add-expense', (req, res) => {
     const { item, amount, category, currentBudget } = req.body;
     const limit = parseFloat(currentBudget) || 0;
@@ -62,12 +64,12 @@ app.post('/add-expense', (req, res) => {
     });
 });
 
-// FEATURE: Delete All
+// FEATURE: Delete All (Your exact logic)
 app.post('/delete-all', (req, res) => {
     db.query("DELETE FROM expenses", (err) => res.json({ message: "Cleared" }));
 });
 
-// FEATURE: CSV Export
+// FEATURE: CSV Export (Your exact logic)
 app.get('/export-csv', (req, res) => {
     db.query("SELECT item_name, amount, category, log_date FROM expenses", (err, results) => {
         if (err) return res.status(500).send(err);
@@ -77,14 +79,14 @@ app.get('/export-csv', (req, res) => {
     });
 });
 
-// ADDED: Root route to ensure the dashboard loads on /
+// 3. ESSENTIAL: Route to serve index.html when people visit the link
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// MODIFIED: Use dynamic port for Vercel
+// 4. ESSENTIAL: Dynamic Port for Vercel
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 SpendWise Pro live at port ${PORT}`));
 
-// ADDED: This is required for Vercel to recognize your server as a function
+// 5. ESSENTIAL: Export the app for Vercel deployment
 module.exports = app;
