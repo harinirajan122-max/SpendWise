@@ -2,22 +2,34 @@ const express = require('express');
 const mysql = require('mysql2');
 const nodemailer = require('nodemailer');
 const { Parser } = require('json2csv');
+const path = require('path'); // Added for Vercel pathing
 require('dotenv').config();
 
 const app = express();
 app.use(express.json());
-app.use(express.static('public'));
+
+// 1. Tell Express where the public folder is (Vercel-friendly way)
+app.use(express.static(path.join(__dirname, 'public')));
 
 const db = mysql.createConnection({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASS,
-    database: process.env.DB_NAME
+    database: process.env.DB_NAME,
+    port: process.env.DB_PORT || 4000 // TiDB usually uses 4000
 });
 
 const transporter = nodemailer.createTransport({
     service: 'gmail',
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
+    auth: { 
+        user: process.env.EMAIL_USER, 
+        pass: process.env.EMAIL_PASS 
+    }
+});
+
+// 2. EXPLICIT HOME ROUTE (This fixes the "Cannot GET /" error)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/get-expenses', (req, res) => {
@@ -35,7 +47,6 @@ app.post('/add-expense', (req, res) => {
         if (err) return res.status(500).json({ message: "Error" });
 
         db.query("SELECT SUM(amount) as total FROM expenses", (err, results) => {
-            // FIX: Wraps the result in Number() to prevent .toFixed() errors
             const currentTotal = Number(results[0].total) || 0;
 
             transporter.sendMail({
@@ -71,10 +82,4 @@ app.get('/export-csv', (req, res) => {
     });
 });
 
-// Export the app for Vercel
-module.exports = app;
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server is live on port ${PORT}`);
-});
+// Export the app for V
