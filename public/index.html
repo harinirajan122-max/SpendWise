@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>SpendWise-Smart Financial Analytics</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #f0f4f8; display: flex; flex-direction: column; align-items: center; padding: 40px; gap: 20px; }
         .main-layout { display: flex; gap: 20px; max-width: 1000px; width: 100%; }
@@ -20,6 +21,25 @@
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         th, td { text-align: left; padding: 12px; border-bottom: 1px solid #edf2f7; }
         .stat-box { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #edf2f7; font-size: 1.1rem; }
+        /* Mobile View Fix */
+@media (max-width: 768px) {
+    .main-layout {
+        flex-direction: column; /* Stacks SpendWise and Analytics vertically */
+        align-items: center;
+        gap: 15px;
+    }
+
+    .card, .dashboard {
+        width: 100% !important; /* Makes cards full width on phone */
+        max-width: 100%;
+    }
+
+    body {
+        padding: 10px;
+        height: auto; /* Allows the page to grow longer */
+        overflow-y: auto; /* Enables scrolling */
+    }
+}
     </style>
 </head>
 <body>
