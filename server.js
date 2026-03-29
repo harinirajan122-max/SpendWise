@@ -11,7 +11,7 @@ app.use(express.json());
 // 1. Tell Express where the public folder is (Vercel-friendly way)
 app.use(express.static(path.join(__dirname, 'public')));
 
-  const connection = mysql.createConnection({
+  const db = mysql.createConnection({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASS,
